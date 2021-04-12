@@ -1,0 +1,59 @@
+import requests
+import re
+from selenium import webdriver
+from bs4 import BeautifulSoup
+import time
+import json
+
+def get_stock_no_list(url):#通过正则，从股票列表页面，获取所有的股票编号 
+    r = requests.get(url)
+    html = r.text
+    #print(html)
+    stock_codes = re.findall(r'php\?stockcode=(\d+)"',html)
+    return  stock_codes
+
+#print(get_stock_no_list(url))
+
+
+def get_page_souce(driver,url): #使用无头浏览器获取页面js执行后的源码  
+    driver.get(url)
+    html = driver.page_source
+    return html
+
+def save_stock_info_to_file(html,file_path):#用bs4把股票名字和信息提取出来，保存到文件中
+    infoDict = {}
+    if html=="":#网页为空就返回None
+        return None
+    soup = BeautifulSoup(html,'html.parser')
+    #通过find方法，使用h1标签和id属性，确定h1这个元素，在用find(i)找到它下面的i元素，
+    #再用.text，取到i元素的文本---》股票名字
+    try:
+        print(soup.find("h1",attrs={'id':"stockName"}).find("i").text)        
+        stock_name = soup.find("h1",attrs={'id':"stockName"}).find("i").text#获取股票的名字
+        infoDict["股票名字"]= stock_name
+        ths = soup.find("div",attrs={'id':"hqDetails"}).find_all("th")#拿到所有th元素
+        tds = soup.find("div",attrs={'id':"hqDetails"}).find_all("td")#拿到所有td元素
+        for i in range(len(ths)):
+            key = ths[i].text
+            value = tds[i].text
+            infoDict[key]=value
+        print(infoDict)
+        with open(file_path,"a",errors="ignore") as fp:
+            fp.write(json.dumps(infoDict,ensure_ascii=False))#把infoDict转换成json串
+    except Exception as e:
+        print("提取信息出错！")
+        print(e)
+
+
+stock_list_url = 'http://www.bestopview.com/stocklist.html' #股票列表的网址
+#url = "http://finance.sina.com.cn/realstock/company/sh600121/nc.shtml"#股票详情页面网址
+path = r'E:\phantomjs\bin\phantomjs.exe'#浏览器所在位置
+driver = webdriver.PhantomJS(path)#启动一个无头浏览器
+
+#print(get_page_souce(driver,url))#获取指定网址的源码
+stock_list = get_stock_no_list(stock_list_url)#拿到所有股票的列表
+for stock_no in stock_list[:20]:#遍历股票列表
+   stock_info_url = "http://finance.sina.com.cn/realstock/company/sh%s/nc.shtml" %stock_no #拿到所有股票的详情页的绝对地址
+   html = get_page_souce(driver,stock_info_url)#获取网页源码
+   print("============== 开始爬取股票的信息：%s=====================" %stock_no)
+   save_stock_info_to_file(html,"e:\\a.txt")#把信息存到指定路径下
